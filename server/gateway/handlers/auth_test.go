@@ -1,0 +1,432 @@
+package handlers
+
+import (
+	"bytes"
+	"chat/server/gateway/models/users"
+	"chat/server/gateway/sessions"
+	"encoding/json"
+	"io"
+	"io/ioutil"
+	"log"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+)
+
+//prereq to test API
+
+//	fake context
+//		fake userstore
+//			- "db" of users
+//		fake sessionstore
+//			-id
+//			-sessionstate
+
+//initTest or initSample JSON X() inits fake struct or JSON byte slice for testing
+func initTestHandlerContext() *HandlerContext {
+	testSessStore := sessions.NewMemStore(time.Hour, time.Minute)
+	testUserStore := users.NewFakeUserStore()
+
+	handlerContext := &HandlerContext{}
+	handlerContext.Key = "test"
+	handlerContext.UserStore = testUserStore
+	handlerContext.SessionStore = testSessStore
+
+	return handlerContext
+}
+
+func initSampleJSONUser() []byte {
+	ret := &users.User{}
+	ret.Email = "email"
+	ret.FirstName = "fn"
+	ret.LastName = "ln"
+	ret.ID = 1
+	ret.PassHash = []byte("1")
+	ret.PhotoURL = "w"
+	buffer, err := json.Marshal(ret)
+	if err != nil {
+		log.Fatal("marshal failed")
+
+	}
+	return buffer
+}
+
+func initSampleJSONNewUser() []byte {
+	ret := &users.NewUser{}
+	ret.Email = "email@email.com"
+	ret.FirstName = "fn"
+	ret.LastName = "ln"
+	ret.Password = "aaaaaaaaaaaaaaaaaaa"
+	ret.PasswordConf = "aaaaaaaaaaaaaaaaaaa"
+	ret.UserName = "abcabc"
+	buffer, err := json.Marshal(ret)
+
+	if err != nil {
+		log.Fatal("marshal failed")
+
+	}
+	return buffer
+}
+
+func initSampleJSONUpdate() []byte {
+	ret := &users.Updates{}
+	ret.FirstName = "dongo"
+	ret.LastName = "bongo"
+	buffer, err := json.Marshal(ret)
+
+	if err != nil {
+		log.Fatal("marshal failed")
+
+	}
+	return buffer
+}
+
+func initSampleJSONCredentials(email string, password string) []byte {
+	ret := &users.Credentials{}
+	ret.Email = email
+	ret.Password = password
+	buffer, err := json.Marshal(ret)
+	if err != nil {
+		log.Fatal("marshal failed")
+
+	}
+	return buffer
+}
+
+/* ///////////////////////////////////////
+TESTS
+*/ ///////////////////////////////////////
+
+//test userhandler {POST}
+//	cases
+//		STATUS
+//			http.StatusMethodNotAllowed
+//			http.StatusUnsupportedMediaType
+//			http.StatusCreated
+
+//TestUserHandler tests userhandler
+func TestStatusUserHandler(t *testing.T) {
+	byteUser := initSampleJSONNewUser()
+	//c = cases
+	c := []struct {
+		method         string
+		body           io.Reader
+		expectedStatus int
+		caseName       string
+	}{
+		{
+			"gargon",
+			nil,
+			http.StatusMethodNotAllowed,
+			"http.StatusMethodNotAllowed",
+		},
+		{
+			"POST",
+			nil,
+			http.StatusUnsupportedMediaType,
+			"http.StatusMethodNotAllowed nil json body POST",
+		},
+		{
+			"POST",
+			bytes.NewReader(byteUser),
+			http.StatusCreated,
+			"http.StatusCreated",
+		},
+	}
+
+	for i := 0; i < len(c); i++ {
+		//create situation for test
+		context := initTestHandlerContext()
+		handler := http.HandlerFunc(context.UserHandler)
+		req := httptest.NewRequest(c[i].method, "http://testing", c[i].body)
+		req.Header.Add("Content-Type", "application/json")
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, req)
+
+		t.Log(c[i].caseName)
+		//check error code
+		if recorder.Result().StatusCode != c[i].expectedStatus {
+			t.Errorf(" FAIL %v ", recorder.Result().StatusCode)
+		} else {
+			t.Log("  PASS")
+		}
+	}
+	userToString := initSampleJSONNewUser()
+	t.Log(string(userToString))
+}
+
+//test specificuserhandler {GET, POST}
+//	cases
+//		STATUS
+//			http.StatusUnauthorized
+//			http.StatusNotFound
+//			http.StatusUnsupportedMediaType
+//			http.StatusOK
+
+//TestSpecificUserHandler tests specific user handler
+func TestStatusSpecificUserHandler(t *testing.T) {
+	byteUpdate := initSampleJSONUpdate()
+	//c = cases
+	c := []struct {
+		method         string
+		path           string
+		body           io.Reader
+		expectedStatus int
+		caseName       string
+	}{
+		{
+			"gargon",
+			"http://testing/don-cheadle",
+			nil,
+			http.StatusMethodNotAllowed,
+			"http.StatusMethodNotAllowed",
+		},
+		{
+			"GET",
+			"http://testing/don-cheadle",
+			nil,
+			418,
+			"invalid path format",
+		},
+		{
+			"GET",
+			"http://testing/2",
+			nil,
+			404,
+			"Valid path format, invalid path",
+		},
+		{
+			"GET",
+			"http://testing/1",
+			nil,
+			http.StatusOK,
+			"Valid path format, valid, nil body",
+		},
+		{
+			"PATCH",
+			"http://testing/1",
+			bytes.NewReader(byteUpdate),
+			http.StatusOK,
+			"valid update",
+		},
+		{
+			"GET",
+			"http://testing/me",
+			bytes.NewReader(byteUpdate),
+			http.StatusUnauthorized,
+			"unauthorized /me",
+		},
+		{
+			"GET",
+			"http://testing/me",
+			bytes.NewReader(byteUpdate),
+			http.StatusOK,
+			"authorized /me",
+		},
+	}
+
+	for i := 0; i < len(c); i++ {
+		//create situation for test
+		context := initTestHandlerContext()
+		handler := http.HandlerFunc(context.SpecificUserHandler)
+		req := httptest.NewRequest(c[i].method, c[i].path, c[i].body)
+		req.Header.Add("Content-Type", "application/json")
+		recorder := httptest.NewRecorder()
+
+		//goofy method of adding auth token for last case.
+		if i == len(c)-1 {
+			ss := &SessionState{}
+			ss.StartTime = time.Now()
+			ss.User = &users.User{}
+			token, err := sessions.BeginSession(context.Key, context.SessionStore, ss, recorder)
+			if err != nil {
+				t.Fatal("failed to init sessionstore")
+			}
+			bearer := "Bearer " + token.String()
+			req.Header.Add("Authorization", bearer)
+		}
+
+		handler.ServeHTTP(recorder, req)
+
+		t.Log(c[i].caseName)
+		//check error code
+		if recorder.Result().StatusCode != c[i].expectedStatus {
+			t.Errorf(" FAIL %v ", recorder.Result().StatusCode)
+		} else {
+			t.Log("  PASS")
+		}
+	}
+}
+
+//test sessionhandler {POST}
+//	cases
+//		STATUS
+//			http.StatusUnsupportedMediaType
+//			http.StatusUnauthorized
+//			400
+//			http.StatusOK
+
+//TestsSessionHandler tests sessionshandler
+func TestStatusSessionHandler(t *testing.T) {
+	c := []struct {
+		method         string
+		body           io.Reader
+		expectedStatus int
+		caseName       string
+	}{
+		{
+			"gargon",
+			nil,
+			http.StatusMethodNotAllowed,
+			"http.StatusMethodNotAllowed",
+		},
+		{
+			"POST",
+			nil,
+			http.StatusUnauthorized,
+			"http.StatusUnauthorized invalid request body format",
+		},
+		{
+			"POST",
+			bytes.NewReader(initSampleJSONCredentials("invalid", "1")),
+			http.StatusUnauthorized,
+			"http.StatusUnauthorized invalid email",
+		},
+		{
+			"POST",
+			bytes.NewReader(initSampleJSONCredentials("valid", "2")),
+			http.StatusUnauthorized,
+			"http.StatusUnauthorized invalid password",
+		},
+		{
+			"POST",
+			bytes.NewReader(initSampleJSONCredentials("valid", "1")),
+			http.StatusOK,
+			"http.StatusOK",
+		},
+	}
+
+	for i := 0; i < len(c); i++ {
+		//create situation for test
+		context := initTestHandlerContext()
+		handler := http.HandlerFunc(context.SessionsHandler)
+		req := httptest.NewRequest(c[i].method, "http://testing", c[i].body)
+		req.Header.Add("Content-Type", "application/json")
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, req)
+
+		t.Log(c[i].caseName)
+		//check error code
+		if recorder.Result().StatusCode != c[i].expectedStatus {
+			t.Errorf(" FAIL %v ", recorder.Result().StatusCode)
+		} else {
+			t.Log("  PASS")
+		}
+	}
+}
+
+//test specificsessionhandler {delete}
+//	cases
+//		STATUS
+//			http.StatusForbidden
+//			http.StatusUnauthorized
+//	good case
+
+//TestSpecificSessionHandler
+func TestStatusSpecificSessionHandler(t *testing.T) {
+	//invalid request method
+	//bad path segment
+	//no session token
+	//valid
+	c := []struct {
+		method         string
+		path           string
+		expectedStatus int
+		caseName       string
+	}{
+		{
+			"gargon",
+			"http://epnis/",
+			http.StatusMethodNotAllowed,
+			"http.StatusMethodNotAllowed",
+		},
+		{
+			"DELETE",
+			"http://testing/mungus",
+			http.StatusForbidden,
+			"http.StatusForbidden invalid path schema",
+		},
+		{
+			"DELETE",
+			"http://testing/mine",
+			http.StatusUnauthorized,
+			"http.StatusUnauthorized no session token",
+		},
+		{
+			"DELETE",
+			"http://testing/mine",
+			http.StatusOK,
+			"http.StatusOK",
+		},
+	}
+
+	for i := 0; i < len(c); i++ {
+		//create situation for test
+		context := initTestHandlerContext()
+		handler := http.HandlerFunc(context.SpecificSessionsHandler)
+		req := httptest.NewRequest(c[i].method, c[i].path, nil)
+		req.Header.Add("Content-Type", "application/json")
+		recorder := httptest.NewRecorder()
+
+		//goofy method of adding auth token for last case.
+		if i == len(c)-1 {
+			ss := &SessionState{}
+			ss.StartTime = time.Now()
+			ss.User = &users.User{}
+			token, err := sessions.BeginSession(context.Key, context.SessionStore, ss, recorder)
+			if err != nil {
+				t.Fatal("failed to init sessionstore")
+			}
+			bearer := "Bearer " + token.String()
+			req.Header.Add("Authorization", bearer)
+		}
+		handler.ServeHTTP(recorder, req)
+
+		t.Log(c[i].caseName)
+		//check error code
+		if recorder.Result().StatusCode != c[i].expectedStatus {
+			t.Errorf(" FAIL %v ", recorder.Result().StatusCode)
+		} else {
+			t.Log("  PASS")
+		}
+	}
+}
+
+//tests json output
+func TestOutput(t *testing.T) {
+
+	//UserHandler output verify spaghetti
+	byteUser := initSampleJSONNewUser()
+	context := initTestHandlerContext()
+	handler := http.HandlerFunc(context.UserHandler)
+	req := httptest.NewRequest("POST", "http://testing", bytes.NewReader(byteUser))
+	req.Header.Add("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, req)
+
+	body := recorder.Result().Body
+	u := &users.User{}
+	bodystring, _ := ioutil.ReadAll(body)
+
+	if err := json.Unmarshal(bodystring, u); err != nil {
+		t.Fatal("error decoding JSON")
+	}
+
+	if u.ID == 0 {
+		t.Log("PASS UserHandler Output")
+	} else {
+		t.Error("FAIL UserHandler Output")
+	}
+
+}

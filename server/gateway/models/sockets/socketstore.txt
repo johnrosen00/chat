@@ -1,0 +1,76 @@
+legacy implementation of socket store, keeping around in files just in case.
+
+// package sockets
+
+// import (
+// 	"assignments-johnrosen00/servers/gateway/models/rabbitpayload"
+// 	"encoding/json"
+// 	"sync"
+
+// 	"github.com/gorilla/websocket"
+// )
+
+// //SocketStore is a store for socket connections, with a built in Mutex lock
+// type SocketStore struct {
+// 	Connections map[int64]*websocket.Conn
+// 	lock        sync.Mutex
+// }
+
+// //Init initializes a socketstore
+// func Init() *SocketStore {
+// 	this := &SocketStore{}
+// 	this.Connections = make(map[int64]*websocket.Conn)
+
+// 	return this
+// }
+
+// //Methods to write to users.
+
+// //WriteToUser writes a message to a single user
+// func (store *SocketStore) WriteToUser(message []byte, id int64) error {
+// 	store.Connections[id].WriteJSON(message)
+// 	return nil
+// }
+
+// //WriteToUsers writes a message to list of users
+// func (store *SocketStore) WriteToUsers(message []byte, ids []int64) error {
+// 	for i := int64(0); i < int64(len(ids)); i++ {
+// 		if store.Connections[i] != nil {
+// 			if err := store.WriteToUser(message, ids[i]); err != nil {
+// 				return err
+// 			}
+// 		}
+// 	}
+
+// 	return nil
+// }
+
+// //WriteToAllUsers writes a message to all users
+// func (store *SocketStore) WriteToAllUsers(message []byte) error {
+// 	for i := int64(0); i < int64(len(store.Connections)); i++ {
+// 		if err := store.WriteToUser(message, i); err != nil {
+// 			return err
+// 		}
+// 	}
+
+// 	return nil
+// }
+
+// //GatewayConsumeHandler handles consumption in the gateway
+// func (store *SocketStore) GatewayConsumeHandler(body []byte) error {
+// 	payload := &rabbitpayload.Payload{}
+// 	if err := json.Unmarshal(body, payload); err != nil {
+// 		return err
+// 	}
+
+// 	//don't know how to handle non message new structs
+// 	if payload.Type != "message-new" {
+// 		return nil
+// 	}
+// 	if payload.UserIDs == nil {
+// 		store.WriteToAllUsers(payload.Body)
+// 	} else {
+// 		store.WriteToUsers(payload.Body, payload.UserIDs)
+// 	}
+// 	return nil
+// }
