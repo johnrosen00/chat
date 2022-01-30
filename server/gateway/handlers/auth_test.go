@@ -2,8 +2,8 @@ package handlers
 
 import (
 	"bytes"
-	"chat/server/gateway/models/users"
 	"chat/server/gateway/sessions"
+	"chat/server/models/users"
 	"encoding/json"
 	"io"
 	"io/ioutil"

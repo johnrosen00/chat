@@ -1,8 +1,8 @@
 package handlers
 
 import (
-	"chat/server/gateway/models/users"
 	"chat/server/gateway/sessions"
+	"chat/server/models/users"
 	"encoding/json"
 	"net/http"
 	"path"
@@ -14,6 +14,7 @@ import (
 
 //UserHandler POSTS new users to database.
 func (cx *HandlerContext) UserHandler(w http.ResponseWriter, r *http.Request) {
+
 	//if not POST, will handle GET in future iterations
 	if r.Method != "POST" {
 		http.Error(w, "Forbidden method.", http.StatusMethodNotAllowed)

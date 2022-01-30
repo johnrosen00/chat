@@ -1,6 +1,6 @@
 package channels
 
-import "chat/server/gateway/models/messages"
+import "chat/server/models/messages"
 
 //Store accesses Channels
 type Store interface {

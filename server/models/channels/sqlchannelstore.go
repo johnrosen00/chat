@@ -1,8 +1,8 @@
 package channels
 
 import (
-	"chat/server/gateway/models/messages"
-	"chat/server/gateway/models/users"
+	"chat/server/models/messages"
+	"chat/server/models/users"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -87,10 +87,10 @@ func (store *SQLChannelStore) GetByID(id int64) (*Channel, error) {
 	//get list of members :(
 
 	memberQuery := "select channelid, userid from userchannel where channelid=?"
-	rows, err78 := store.DB.Query(memberQuery, id)
+	rows, err := store.DB.Query(memberQuery, id)
 
-	if err78 != nil {
-		return nil, err78
+	if err != nil {
+		return nil, err
 	}
 
 	userstore := &users.MySQLStore{}
@@ -101,8 +101,8 @@ func (store *SQLChannelStore) GetByID(id int64) (*Channel, error) {
 	var currentUserID int64
 	for rows.Next() {
 
-		if err89 := rows.Scan(throwaway, currentUserID); err89 != nil {
-			return nil, err89
+		if err = rows.Scan(throwaway, currentUserID); err != nil {
+			return nil, err
 		}
 
 		currentUser, err45 := userstore.GetByID(currentUserID)
@@ -113,9 +113,7 @@ func (store *SQLChannelStore) GetByID(id int64) (*Channel, error) {
 
 		userSlice = append(userSlice, currentUser)
 	}
-
 	c.Members = userSlice
-
 	return c, nil
 }
 
