@@ -1,28 +1,33 @@
-package messages
+package db
 
 import (
-	"chat/server/models/users"
-	"database/sql"
+	"chat/server/models/messages"
+
 	"errors"
 	"fmt"
 	"time"
 )
 
-//SQLMessageStore is a store of messages
-type SQLMessageStore struct {
-	DB *sql.DB
+//MessageStore is a store of messages
+type MessageStore struct {
+	conn *Connection
+}
+
+func (c *Connection) InitMessageStore() *MessageStore {
+	return &MessageStore{conn: c}
 }
 
 //GetRecentX gets X most recent messages in channel
-func (store *SQLMessageStore) GetRecentX(x int64, channelid int64) (Messages, error) {
+func (store *MessageStore) GetRecentX(x int64, channelid int64) (messages.Messages, error) {
+	db := store.conn.db
 	q := "select messageid, channelid, createdat from messages where channelid=? order by createdat limit ?"
-	rows, err := store.DB.Query(q, channelid, x)
+	rows, err := db.Query(q, channelid, x)
 
 	if err != nil {
 		return nil, err
 	}
 
-	var messageSlice Messages
+	var messageSlice messages.Messages
 	var currentMessageID int64
 	for rows.Next() {
 
@@ -42,20 +47,21 @@ func (store *SQLMessageStore) GetRecentX(x int64, channelid int64) (Messages, er
 }
 
 //GetRecentXBeforeY gets X most recent messages in channel BeforeY
-func (store *SQLMessageStore) GetRecentXBeforeY(x int64, y int64, channelid int64) (Messages, error) {
+func (store *MessageStore) GetRecentXBeforeY(x int64, y int64, channelid int64) (messages.Messages, error) {
+	db := store.conn.db
 	q := "select messageid, channelid, createdat from messages where channelid=? and messageid < ? order by createdat limit ?"
-	rows, err := store.DB.Query(q, channelid, y, x)
+	rows, err := db.Query(q, channelid, y, x)
 
 	if err != nil {
 		return nil, err
 	}
 
-	var messageSlice Messages
+	var messageSlice messages.Messages
 	var currentMessageID int64
 	for rows.Next() {
 
-		if err89 := rows.Scan(currentMessageID); err89 != nil {
-			return nil, err89
+		if err := rows.Scan(currentMessageID); err != nil {
+			return nil, err
 		}
 
 		currentMessage, err45 := store.GetByID(currentMessageID)
@@ -70,11 +76,12 @@ func (store *SQLMessageStore) GetRecentXBeforeY(x int64, y int64, channelid int6
 }
 
 //GetByID gets Message by ID
-func (store *SQLMessageStore) GetByID(id int64) (*Message, error) {
+func (store *MessageStore) GetByID(id int64) (*messages.Message, error) {
+	db := store.conn.db
 	q := "select messageid, channelid, messagebody, createdat, creatorid, editedat from messages where messageid=?"
-	row := store.DB.QueryRow(q, id)
+	row := db.QueryRow(q, id)
 
-	m := &Message{}
+	m := &messages.Message{}
 	var userID int64
 	err := row.Scan(m.ID, m.ChannelID, m.Body, m.CreatedAt, userID, m.EditedAt)
 
@@ -82,8 +89,7 @@ func (store *SQLMessageStore) GetByID(id int64) (*Message, error) {
 		return nil, err
 	}
 
-	userStore := &users.MySQLStore{}
-	userStore.DB = store.DB
+	userStore := store.conn.InitUserStore()
 	user, err1 := userStore.GetByID(userID)
 	if err1 != nil {
 		return nil, err1
@@ -95,14 +101,15 @@ func (store *SQLMessageStore) GetByID(id int64) (*Message, error) {
 }
 
 //Insert inserts a new message
-func (store *SQLMessageStore) Insert(m *Message) (*Message, error) {
+func (store *MessageStore) Insert(m *messages.Message) (*messages.Message, error) {
+	db := store.conn.db
 	if err := m.Validate(); err != nil {
 		return nil, err
 	}
 
 	insq := "insert into messages(channelid, body, createdat, creator) values(?,?,?,?)"
 
-	res, err1 := store.DB.Exec(insq, m.ChannelID, m.Body, time.Now(), m.Creator.ID)
+	res, err1 := db.Exec(insq, m.ChannelID, m.Body, time.Now(), m.Creator.ID)
 	if err1 != nil {
 		fmt.Printf("error inserting new row: %v\n", err1)
 		return nil, err1
@@ -120,10 +127,11 @@ func (store *SQLMessageStore) Insert(m *Message) (*Message, error) {
 }
 
 //Delete deletes a channel from the store.
-func (store *SQLMessageStore) Delete(id int64) error {
+func (store *MessageStore) Delete(id int64) error {
+	db := store.conn.db
 	ex := "delete from messages where messageid = ?"
 
-	_, err := store.DB.Exec(ex, id)
+	_, err := db.Exec(ex, id)
 
 	if err != nil {
 		return err
@@ -133,14 +141,15 @@ func (store *SQLMessageStore) Delete(id int64) error {
 }
 
 //Edit modifies an existing message
-func (store *SQLMessageStore) Edit(id int64, edit *MessageEdit) (*Message, error) {
+func (store *MessageStore) Edit(id int64, edit *messages.MessageEdit) (*messages.Message, error) {
+	db := store.conn.db
 	queryF := "update messages set body = ? , editedAt = ? where messageid = ?"
 
 	if len(edit.Body) < 1 {
 		return nil, errors.New("submit valid edit")
 	}
 
-	if _, err := store.DB.Exec(queryF, edit.Body, time.Now(), id); err != nil {
+	if _, err := db.Exec(queryF, edit.Body, time.Now(), id); err != nil {
 		return nil, err
 	}
 

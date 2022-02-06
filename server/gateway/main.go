@@ -3,7 +3,7 @@ package main
 import (
 	"chat/server/gateway/handlers"
 	"chat/server/gateway/sessions"
-	"chat/server/models/users"
+	"chat/server/models/db"
 	"database/sql"
 	"fmt"
 	"log"
@@ -43,19 +43,18 @@ func main() {
 
 	//DB Connections
 	dsn := os.Getenv("DSN")
-	userStore := &users.MySQLStore{}
-
-	if db, err := sql.Open("mysql", dsn); err != nil {
+	conn * db.Connection
+	if database, err := sql.Open("mysql", dsn); err != nil {
 		fmt.Printf("error opening database: %v\n,", err)
 	} else {
-		defer db.Close()
-		userStore.DB = db
+		defer database.Close()
+		conn := db.InitConnection(database)
 	}
 
 	cx := &handlers.HandlerContext{
 		Key:          sessionKey,
 		SessionStore: sessionStore,
-		UserStore:    userStore,
+		Data:         conn,
 	}
 
 	mux2 := http.NewServeMux()
