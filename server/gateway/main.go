@@ -43,7 +43,7 @@ func main() {
 
 	//DB Connections
 	dsn := os.Getenv("DSN")
-	conn * db.Connection
+	var conn *db.Connection
 	if database, err := sql.Open("mysql", dsn); err != nil {
 		fmt.Printf("error opening database: %v\n,", err)
 	} else {

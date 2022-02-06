@@ -32,6 +32,8 @@ func (cx *HandlerContext) UserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userStore := cx.Data.InitUserStore()
+
 	//check if format is in format of *users.NewUser
 	//json.Unmarshal(jsontounmarshal, NU)
 	newUser := &users.NewUser{}
@@ -49,7 +51,7 @@ func (cx *HandlerContext) UserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err1 = cx.UserStore.Insert(user)
+	user, err1 = userStore.Insert(user)
 
 	if err1 != nil {
 		http.Error(w, err1.Error(), http.StatusBadRequest)
@@ -63,7 +65,7 @@ func (cx *HandlerContext) UserHandler(w http.ResponseWriter, r *http.Request) {
 	newSessionState.StartTime = time.Now()
 	sessions.BeginSession(cx.Key, cx.SessionStore, newSessionState, w)
 
-	if errT := cx.UserStore.Track(r, user.ID, time.Now()); errT != nil {
+	if errT := userStore.Track(r, user.ID, time.Now()); errT != nil {
 		http.Error(w, errT.Error(), http.StatusBadRequest)
 		return
 	}
@@ -98,7 +100,7 @@ func (cx *HandlerContext) SpecificUserHandler(w http.ResponseWriter, r *http.Req
 		http.Error(w, "Unsupported HTTP method.", http.StatusMethodNotAllowed)
 		return
 	}
-
+	userStore := cx.Data.InitUserStore()
 	userPath := r.URL.Path
 	userPath = path.Base(userPath)
 	u := &users.User{}
@@ -120,7 +122,7 @@ func (cx *HandlerContext) SpecificUserHandler(w http.ResponseWriter, r *http.Req
 		}
 
 		//u = user
-		u, err = cx.UserStore.GetByID(int64(id0))
+		u, err = userStore.GetByID(int64(id0))
 
 		if err != nil {
 			http.Error(w, "ID not found.", http.StatusNotFound)
@@ -144,22 +146,17 @@ func (cx *HandlerContext) SpecificUserHandler(w http.ResponseWriter, r *http.Req
 			return
 		}
 
-		u2, err1 := cx.UserStore.Update(id, newUpdate)
+		err := userStore.Update(id, newUpdate)
 
-		if err1 != nil {
+		if err != nil {
 			http.Error(w, "Invalid update fields.", http.StatusUnsupportedMediaType)
 			return
 		}
-		u = u2
+
 	}
 
 	w.Header().Add("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	enc := json.NewEncoder(w)
-
-	if err3 := enc.Encode(u); err3 != nil {
-		http.Error(w, "Unable to encode to JSON", 404)
-	}
 
 }
 
@@ -181,7 +178,7 @@ func (cx *HandlerContext) SessionsHandler(w http.ResponseWriter, r *http.Request
 	//	- invalid json format OR
 	//	- can find user using credentials but cannot authenticate.
 	//		http.Error(w, "invalid credentials", http.StatusUnauthorized)
-
+	userStore := cx.Data.InitUserStore()
 	newCredentials := &users.Credentials{}
 	d := json.NewDecoder(r.Body)
 
@@ -191,7 +188,7 @@ func (cx *HandlerContext) SessionsHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	u, errAuth := cx.UserStore.GetByEmail(newCredentials.Email)
+	u, errAuth := userStore.GetByEmail(newCredentials.Email)
 	if errAuth != nil {
 		bcrypt.CompareHashAndPassword([]byte("g"), []byte(newCredentials.Password))
 		http.Error(w, "invalid credentials", http.StatusUnauthorized)
@@ -209,10 +206,12 @@ func (cx *HandlerContext) SessionsHandler(w http.ResponseWriter, r *http.Request
 	newSessionState.StartTime = time.Now()
 	sessions.BeginSession(cx.Key, cx.SessionStore, newSessionState, w)
 
-	if errT := cx.UserStore.Track(r, u.ID, time.Now()); errT != nil {
-		http.Error(w, "error tracking user session.", http.StatusBadRequest)
-		return
-	}
+	//Zombie code if Tracking is turned on again!
+	// if errT := cx.UserStore.Track(r, u.ID, time.Now()); errT != nil {
+	// 	http.Error(w, "error tracking user session.", http.StatusBadRequest)
+	// 	return
+	// }
+
 	//	response body:
 	//		content-type header = application/json
 	// 		status code http.StatusCreated
@@ -239,6 +238,7 @@ func (cx *HandlerContext) SpecificSessionsHandler(w http.ResponseWriter, r *http
 	//if request method is DELETE
 	//	if last path segment != "mine"
 	//		http.Error(w, "Access forbidden.", http.StatusForbidden)
+
 	pathSeg := r.URL.Path
 	pathSeg = path.Base(pathSeg)
 
@@ -254,6 +254,7 @@ func (cx *HandlerContext) SpecificSessionsHandler(w http.ResponseWriter, r *http
 		http.Error(w, "invalid session token", http.StatusUnauthorized)
 		return
 	}
+
 	//	response body:
 	//		plain text message: "signed out"
 	w.WriteHeader(http.StatusOK)
