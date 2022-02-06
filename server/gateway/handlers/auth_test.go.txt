@@ -1,5 +1,7 @@
 package handlers
 
+//old test code to test auth endpoints - uses deprecated code.
+
 import (
 	"bytes"
 	"chat/server/gateway/sessions"

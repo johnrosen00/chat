@@ -133,17 +133,17 @@ func (store *ChannelStore) Insert(c *channels.Channel) (*channels.Channel, error
 
 	insq := "insert ignore into channels (channelname, channeldescription, isprivate, createdat, creatorid) values (?,?,?,?,?)"
 
-	res, err1 := db.Exec(insq, c.Name, c.Description, c.Private, time.Now(), c.Creator.ID)
-	if err1 != nil {
-		fmt.Printf("error inserting new row: %v\n", err1)
-		return nil, err1
+	res, err := db.Exec(insq, c.Name, c.Description, c.Private, time.Now(), c.Creator.ID)
+	if err != nil {
+		fmt.Printf("error inserting new row: %v\n", err)
+		return nil, err
 	}
 
 	//get the auto-assigned ID for the new row
-	id, err2 := res.LastInsertId()
-	if err2 != nil {
+	id, err := res.LastInsertId()
+	if err != nil {
 		fmt.Printf("error getting new ID: %v\n", id)
-		return nil, err2
+		return nil, err
 	}
 
 	c.ID = id
@@ -156,15 +156,15 @@ func (store *ChannelStore) Insert(c *channels.Channel) (*channels.Channel, error
 //AddMember adds a new member to user-channel
 func (store *ChannelStore) AddMember(userid int64, channelid int64) error {
 	db := store.conn.db
-	insq2 := "insert into userchannel (userid, channelid) values (?,?)"
-	res2, err1 := db.Exec(insq2, userid, channelid)
-	if err1 != nil {
-		return err1
+	insq := "insert into userchannel (userid, channelid) values (?,?)"
+	res, err := db.Exec(insq, userid, channelid)
+	if err != nil {
+		return err
 	}
 
-	_, err3 := res2.LastInsertId()
-	if err3 != nil {
-		return err3
+	_, err = res.LastInsertId()
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -199,18 +199,18 @@ func (store *ChannelStore) Delete(id int64) error {
 	}
 
 	//delete messages
-	ex2 := "delete from messages where channelid = ?"
+	ex = "delete from messages where channelid = ?"
 
-	_, err = db.Exec(ex2, id)
+	_, err = db.Exec(ex, id)
 
 	if err != nil {
 		return err
 	}
 
 	//delete memberlist
-	ex3 := "delete from userchannel where channelid = ?"
+	ex = "delete from userchannel where channelid = ?"
 
-	_, err = db.Exec(ex3, id)
+	_, err = db.Exec(ex, id)
 
 	if err != nil {
 		return err

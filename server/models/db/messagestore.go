@@ -31,17 +31,15 @@ func (store *MessageStore) GetRecentX(x int64, channelid int64) (messages.Messag
 	var currentMessageID int64
 	for rows.Next() {
 
-		if err89 := rows.Scan(currentMessageID); err89 != nil {
-			return nil, err89
+		if err := rows.Scan(currentMessageID); err != nil {
+			return nil, err
 		}
 
-		currentMessage, err45 := store.GetByID(currentMessageID)
-
-		if err45 != nil {
-			return nil, err45
+		if currentMessage, err := store.GetByID(currentMessageID); err != nil {
+			return nil, err
+		} else {
+			messageSlice = append(messageSlice, currentMessage)
 		}
-
-		messageSlice = append(messageSlice, currentMessage)
 	}
 	return messageSlice, nil
 }

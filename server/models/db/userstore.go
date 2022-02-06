@@ -135,9 +135,9 @@ func (store *UserStore) Track(r *http.Request, id int64, now time.Time) error {
 		return err
 	}
 
-	_, err2 := res.LastInsertId()
+	_, err = res.LastInsertId()
 
-	if err2 != nil {
+	if err != nil {
 		return err
 	}
 
