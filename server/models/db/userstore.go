@@ -1,27 +1,29 @@
-package users
+package db
 
 import (
-	"database/sql"
+	"chat/server/models/users"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
-
-	//comment to satisfy lintr
-	_ "github.com/go-sql-driver/mysql"
 )
 
-//MySQLStore stores a pointer to a database
-type MySQLStore struct {
-	DB *sql.DB
+type UserStore struct {
+	conn *Connection
+}
+
+func (c *Connection) InitUserStore() *UserStore {
+	return &UserStore{conn: c}
 }
 
 //GetByID returns the User with the given ID
-func (store *MySQLStore) GetByID(id int64) (*User, error) {
-	q := "select userid, email, firstname, lastname, username, photourl, passhash from users where id = ?"
-	row := store.DB.QueryRow(q, id)
+func (store *UserStore) GetByID(id int64) (*users.User, error) {
+	db := store.conn.db
 
-	u := &User{}
+	q := "select userid, email, firstname, lastname, username, photourl, passhash from users where id = ?"
+	row := db.QueryRow(q, id)
+
+	u := &users.User{}
 	err := row.Scan(&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.UserName, &u.PhotoURL, &u.PassHash)
 
 	if err != nil {
@@ -32,11 +34,13 @@ func (store *MySQLStore) GetByID(id int64) (*User, error) {
 }
 
 //GetByEmail returns the User with the given email
-func (store *MySQLStore) GetByEmail(email string) (*User, error) {
-	q := "select userid, email, firstname, lastname, username, photourl, passhash from users where email = ?"
-	row := store.DB.QueryRow(q, email)
+func (store *UserStore) GetByEmail(email string) (*users.User, error) {
+	db := store.conn.db
 
-	u := &User{}
+	q := "select userid, email, firstname, lastname, username, photourl, passhash from users where email = ?"
+	row := db.QueryRow(q, email)
+
+	u := &users.User{}
 	err := row.Scan(&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.UserName, &u.PhotoURL, &u.PassHash)
 
 	if err != nil {
@@ -47,11 +51,13 @@ func (store *MySQLStore) GetByEmail(email string) (*User, error) {
 }
 
 //GetByUserName returns the User with the given Username
-func (store *MySQLStore) GetByUserName(username string) (*User, error) {
-	q := "select userid, email, firstname, lastname, username, photourl, passhash from users where username = ?"
-	row := store.DB.QueryRow(q, username)
+func (store *UserStore) GetByUserName(username string) (*users.User, error) {
 
-	u := &User{}
+	db := store.conn.db
+	q := "select userid, email, firstname, lastname, username, photourl, passhash from users where username = ?"
+	row := db.QueryRow(q, username)
+
+	u := &users.User{}
 	err := row.Scan(&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.UserName, &u.PhotoURL, &u.PassHash)
 
 	if err != nil {
@@ -62,10 +68,11 @@ func (store *MySQLStore) GetByUserName(username string) (*User, error) {
 
 //Insert inserts the user into the database, and returns
 //the newly-inserted User, complete with the DBMS-assigned ID
-func (store *MySQLStore) Insert(user *User) (*User, error) {
+func (store *UserStore) Insert(user *users.User) (*users.User, error) {
+	db := store.conn.db
 	insq := "insert into users(email, firstname, lastname, username, photourl, passhash) values(?,?,?,?,?,?)"
 
-	res, err := store.DB.Exec(insq, user.Email, user.FirstName, user.LastName, user.UserName, user.PhotoURL, user.PassHash)
+	res, err := db.Exec(insq, user.Email, user.FirstName, user.LastName, user.UserName, user.PhotoURL, user.PassHash)
 	if err != nil {
 		fmt.Printf("error inserting new row: %v\n", err)
 		return nil, err
@@ -83,21 +90,23 @@ func (store *MySQLStore) Insert(user *User) (*User, error) {
 
 //Update applies UserUpdates to the given user ID
 //and returns the newly-updated user
-func (store *MySQLStore) Update(id int64, updates *Updates) (*User, error) {
+func (store *UserStore) Update(id int64, updates *users.Updates) error {
+
+	db := store.conn.db
 	queryF := "update users set firstname = ? , lastname = ? where userid = ?"
 
-	if _, err := store.DB.Exec(queryF, updates.FirstName, updates.LastName, id); err != nil {
-		return nil, err
-	}
+	_, err := db.Exec(queryF, updates.FirstName, updates.LastName, id)
 
-	return store.GetByID(id)
+	return err
+
 }
 
 //Delete deletes the user with the given ID
-func (store *MySQLStore) Delete(id int64) error {
+func (store *UserStore) Delete(id int64) error {
+	db := store.conn.db
 	ex := "delete from users where userid = ?"
 
-	_, err := store.DB.Exec(ex, id)
+	_, err := db.Exec(ex, id)
 
 	if err != nil {
 		return err
@@ -107,7 +116,8 @@ func (store *MySQLStore) Delete(id int64) error {
 }
 
 //Track tracks sessions
-func (store *MySQLStore) Track(r *http.Request, id int64, now time.Time) error {
+func (store *UserStore) Track(r *http.Request, id int64, now time.Time) error {
+	db := store.conn.db
 	insq := "insert into userlog(userid, timeinitiated, ip) values(?,?,?)"
 	//insq = insert query
 
@@ -118,16 +128,16 @@ func (store *MySQLStore) Track(r *http.Request, id int64, now time.Time) error {
 		ip = strings.TrimSpace(ips[0])
 	}
 
-	res, err := store.DB.Exec(insq, id, now, ip)
+	res, err := db.Exec(insq, id, now, ip)
 
 	if err != nil {
 		fmt.Printf("error inserting new row: %v\n", err)
 		return err
 	}
 
-	_, err2 := res.LastInsertId()
+	_, err = res.LastInsertId()
 
-	if err2 != nil {
+	if err != nil {
 		return err
 	}
 

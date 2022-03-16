@@ -1,7 +1,7 @@
 package messages
 
 import (
-	"chat/server/gateway/models/users"
+	"chat/server/models/users"
 	"encoding/json"
 	"errors"
 	"time"

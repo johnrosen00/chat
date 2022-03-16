@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"chat/server/gateway/models/users"
+	"chat/server/models/users"
 	"time"
 )
 
